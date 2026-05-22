@@ -1,0 +1,95 @@
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import Int32, Int32MultiArray, String
+import cv2
+
+class MainProgramNode(Node):
+    def __init__(self):
+        super().__init__('main_program_node')
+        self.active_phase = 1  # Track robot mode (1 = Auto, 2 = Manual)
+        self.wanted_letter = ["A", "B", "C"] #change this later!!!!!!!
+
+        # Subscribers
+        self.manual_sub = self.create_subscription(Int32MultiArray, '/controller_input_topic', self.manual_callback, 10)
+        self.grab_sub = self.create_subscription(Int32, '/grabber_command_topic', self.grab_callback, 10)
+	self.letter_sub = self.create_subscription(String, '/cube/detected_letter', self.letter.callback, 10)
+        
+        # Publishers
+        self.state_pub = self.create_publisher(Int32, '/official_robot_state', 10)
+        self.rpm_pub = self.create_publisher(Int32MultiArray, '/motor_rpm_topic', 10)
+        self.nano_pub = self.create_publisher(String, '/nano_command_topic', 10)
+
+        
+        self.get_logger().info("Main Brain Node active. Intercepting 3-state stream.")
+
+    def letter_callback(self, msg):
+        # RULE 1: If we switch to Phase 2 (Manual Mode), freeze camera responses entirely
+        if self.active_phase != 1:
+            return
+
+        detected_letter = msg.data.strip()
+
+        # Ignore empty frames or background noise
+        if detected_letter == "None" or detected_letter == "":
+            return
+
+        # RULE 2: If a cube is detected, check if it matches our desired target list
+        if detected_letter in self.wanted_letters:
+            self.get_logger().warn(f"🎯 TARGET MATCH: Spotted Letter '{detected_letter}'!")
+            
+            # 1. Immediately command the Arduino to freeze wheel execution
+            self.rpm_pub.publish([0, 0])
+            
+            # 2. Trigger your mechanical arm / servo grabber sequence
+            cmd_msg.data = "GRAB\n"            
+            self.nano_pub.publish(cmd_msg)
+
+            # 3. Drop it from the target inventory tracking list so it isn't picked up twice
+            self.wanted_letters.remove(detected_letter)
+            self.get_logger().info(f"Remaining targets to find: {self.wanted_letters}")
+        else:
+            # Optional: Log if a cube is seen but it belongs to an unlisted target letter
+            self.get_logger().info(f"Spotted ignored cube: '{detected_letter}'")
+
+    def manual_callback(self, msg):
+        # Manage Phase switches via Triangle Button
+        toggle_button = msg.data[2]
+        if toggle_button == 1:
+            self.active_phase = 2 if self.active_phase == 1 else 1
+            self.get_logger().info(f"Switched to Phase {self.active_phase}")
+            
+            state_msg = Int32()
+            state_msg.data = self.active_phase
+            self.state_pub.publish(state_msg)
+
+        # Forward single-stick parameters if in Manual Mode
+        if self.active_phase == 2:
+            rpm_msg = Int32MultiArray()
+            rpm_msg.data = [msg.data[0], msg.data[1]]
+            self.rpm_pub.publish(rpm_msg)
+
+    def grab_callback(self, msg):
+        # Translate integer streams into explicit hardware-bound text packets
+        cmd_msg = String()
+        if self.active_phase == 2:
+            if msg.data == 1:
+                cmd_msg.data = "GRAB\n"
+            elif msg.data == 2:
+                cmd_msg.data = "DROP\n"
+            else:
+                cmd_msg.data = "NEUTRAL\n"            
+            self.nano_pub.publish(cmd_msg)
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = MainProgramNode()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
