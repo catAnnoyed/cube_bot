@@ -10,40 +10,38 @@ class ControllerDataNode(Node):
         # Subscribe to live raw PS4 data
         self.joy_sub = self.create_subscription(Joy, '/joy', self.joy_callback, 10)
         
-        # Publisher for combined driving coordinates [Y, X, Phase_Button]
-        self.formatted_joy_pub = self.create_publisher(Int32MultiArray, '/controller_input_topic', 10)
+        # Publisher for joystick coordinate
+        self.formatted_joy_pub = self.create_publisher(Int32MultiArray, '/controller_joy_topic', 10)
         
-        # Publisher for the 3-state grabber topic
-        self.grabber_pub = self.create_publisher(Int32, '/grabber_command_topic', 10)
+        # Publisher to controller buttons
+        self.buttons_pub = self.create_publisher(Int32, '/controller_buttons_topic', 10)
 
-        self.get_logger().info("Controller Logic Node active. 3-State Topic Mode operational.")
+        self.get_logger().info("Controller Logic Node active.")
 
     def joy_callback(self, msg):
-        # 1. DRIVING LOGIC (Single Left Stick Mapping)
+        # joytisck (you get value -100 to 100)
         stick_y = int(msg.axes[1] * 100)  # Forward/Backward
         stick_x = int(msg.axes[0] * 100)  # Left/Right turning
-        toggle_phase_btn = msg.buttons[2] # Triangle Button
-        
         formatted_msg = Int32MultiArray()
-        formatted_msg.data = [stick_y, stick_x, toggle_phase_btn]
+        formatted_msg.data = [stick_y, stick_x]
         self.formatted_joy_pub.publish(formatted_msg)
 
-        # 2. GRABBER LOGIC (3-State Integer Mapping)
-        pickup_btn = msg.buttons[3]  # Square
-        putdown_btn = msg.buttons[0] # X
+        #buttons
+        btn1 = msg.buttons[0]  # A
+        btn2 = msg.buttons[1]  # B
+        btn3 = msg.buttons[2]  # X
+        btn4 = msg.buttons[3]  # Y
+       
+        bttn_state = 0
+        if btn1 == 1: bttn_state |= (1 << 0) # 0001
+        if btn2 == 1: bttn_state |= (1 << 1) # 0010
+        if btn3 == 1: bttn_state |= (1 << 2) # 0100
+        if btn4 == 1: bttn_state |= (1 << 3) # 1000
+       
+       bttn_msg = Int32()
+       bttn_msg.data = bttn_state
+       self.buttons_pub.publish(bttn_msg)
 
-        # Establish our default state
-        grabber_state = 0  # 0 = Neutral (No buttons pressed)
-
-        if pickup_btn == 1:
-            grabber_state = 1  # 1 = Grab Command Active
-        elif putdown_btn == 1:
-            grabber_state = 2  # 2 = Retract Command Active
-
-        # Continuously broadcast the exact state of your thumb buttons
-        grab_msg = Int32()
-        grab_msg.data = grabber_state
-        self.grabber_pub.publish(grab_msg)
 
 def main(args=None):
     rclpy.init(args=args)

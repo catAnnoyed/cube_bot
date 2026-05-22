@@ -19,7 +19,7 @@ class MainProgramNode(Node):
         # Publishers
         self.state_pub = self.create_publisher(Int32, '/official_robot_state', 10)
         #self.rpm_pub = self.create_publisher(Int32MultiArray, '/motor_rpm_topic', 10)
-        #self.nano_pub = self.create_publisher(String, '/nano_command_topic', 10)
+        self.nano_pub = self.create_publisher(String, '/nano_command_topic', 10)
 
         
         self.get_logger().info("Main Brain Node active.")
@@ -67,23 +67,14 @@ class MainProgramNode(Node):
             rpm_msg.data = [msg.data[0], msg.data[1]]
             self.rpm_pub.publish(rpm_msg)
 
-    def grab_callback(self, msg):
-        # Translate integer streams into explicit hardware-bound text packets
-        cmd_msg = String()
-        if self.active_phase == 2:
-            if msg.data == 1:
-                cmd_msg.data = "GRAB\n"
-            elif msg.data == 2:
-                cmd_msg.data = "RETRACT\n"
-            else:
-                cmd_msg.data = "NEUTRAL\n"            
-            self.nano_pub.publish(cmd_msg)
+    def cont_bttn_callback(self, msg):
+	# check if manual mode is activated
 
 def main(args=None):
     rclpy.init(args=args)
     node = MainProgramNode()
     try:
-        rclpy.spin(node)
+        clpy.spin(node)
     except KeyboardInterrupt:
         pass
     finally:

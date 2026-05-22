@@ -14,7 +14,7 @@ class IPAndPhoneCameraStreamer(Node):
         
         # 2. Drop your phone's IP camera network URL feed straight in here
         # (Make sure your Pi and Phone are logged into the exact same Wi-Fi network!)
-        self.camera_url = "http://10.240.53.6:8080/video"
+        self.camera_url = "http://10.164.64.126:8080/video"
         
         self.get_logger().info(f"Connecting to phone camera feed at: {self.camera_url}")
         self.cap = cv2.VideoCapture(self.camera_url)
